@@ -1,0 +1,1 @@
+print("yaha pe likhe jyenge takde functions")
