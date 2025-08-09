@@ -1,68 +1,68 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pymongo import MongoClient
+from dotenv import load_dotenv
+import os
 
-app = Flask(__name__)
-app.secret_key = 'your_secret_key'  # Replace with a secure key
+# ...existing code...
 
-# Step 1: Login/Register Page
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        # Handle login logic here
-        username = request.form['username']
-        password = request.form['password']
-        # Authenticate user (placeholder)
-        session['user'] = username
-        return redirect(url_for('main'))
-    return render_template('login.html')
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pymongo import MongoClient
+from dotenv import load_dotenv
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        # Handle registration logic here
-        username = request.form['username']
-        password = request.form['password']
-        # Save user (placeholder)
-        return redirect(url_for('login'))
-    return render_template('register.html')
 
-# Step 2: Main Page (Input + Suggestions)
-@app.route('/', methods=['GET', 'POST'])
-def main():
-    suggestions = ['Python', 'Web Development', 'Data Science']
-    if request.method == 'POST':
-        prompt = request.form['prompt']
-        return redirect(url_for('analyze', prompt=prompt))
-    return render_template('main.html', suggestions=suggestions)
+# Load environment variables from .env file
+load_dotenv()
 
-# Step 3: Fetch 3 things from prompt
-@app.route('/analyze')
-def analyze():
-    prompt = request.args.get('prompt', '')
-    # Dummy analysis (replace with actual logic)
-    course_name = prompt
-    preferred_language = 'English'
-    course_duration = 'Short'
-    return redirect(url_for('generate_course', 
-                            course_name=course_name, 
-                            language=preferred_language, 
-                            duration=course_duration))
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client["course_builder"]
+users_collection = db["users"]
 
-# Step 4: Generate course modules with embedded YouTube links
-@app.route('/generate_course')
-def generate_course():
-    course_name = request.args.get('course_name', '')
-    language = request.args.get('language', '')
-    duration = request.args.get('duration', '')
-    # Dummy modules and YouTube links
-    modules = [
-        {'title': 'Introduction', 'youtube': 'https://youtube.com/embed/dummy1'},
-        {'title': 'Basics', 'youtube': 'https://youtube.com/embed/dummy2'},
-    ]
-    return render_template('course.html', 
-                           course_name=course_name, 
-                           language=language, 
-                           duration=duration, 
-                           modules=modules)
+app = FastAPI()
 
-if __name__ == '__main__':
-    app.run(debug=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+# Landing page
+@app.get("/", response_class=HTMLResponse)
+async def read_index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+# Login page
+@app.get("/login", response_class=HTMLResponse)
+async def login_get(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.post("/login", response_class=HTMLResponse)
+async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
+    user = users_collection.find_one({"username": username, "password": password})
+    if user:
+        # Redirect to main page after successful login
+        return RedirectResponse(url="/main", status_code=302)
+    return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"})
+
+# Registration endpoint (AJAX)
+@app.post("/register")
+async def register(request: Request):
+    data = await request.json()
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+    # Save user directly (no checks)
+    users_collection.insert_one({
+        "username": username,
+        "email": email,
+        "password": password
+    })
+    return JSONResponse({"success": True, "message": "Registration successful!"})
+
+# Main page after login
+@app.get("/main", response_class=HTMLResponse)
+async def main_page(request: Request):
+    return templates.TemplateResponse("main.html", {"request": request})
